@@ -47,8 +47,7 @@ contract PandaNFT is ERC1155, Ownable {
     }
 
     Panda[] public pandas;
-    // Rarities public rarities = Rarities(80, 10, 5, 4, 1);
-    Rarities public rarities = Rarities(20, 40, 60, 80, 99);
+    Rarities public rarities = Rarities(80, 90, 95, 99, 100);
 
     function getPandas() public view returns (Panda[] memory) { return pandas; }
     function setPaused() public onlyOwner { paused = !paused; }
@@ -88,7 +87,7 @@ contract PandaNFT is ERC1155, Ownable {
     }
 
 
-    function sacrifice(uint256 _burnId, uint256 _advanceId) public {
+    function sacrifice(uint256 _advanceId, uint256 _burnId) public {
         require(pandas[_burnId].class == pandas[_advanceId].class, "Both pandas must be the same class.");
         require(classLimit > pandas[_advanceId].class, "Panda is already at the maximum class.");
         require(balanceOf(msg.sender, _burnId) > 0, "Only the owner can burn this panda.");
@@ -96,8 +95,10 @@ contract PandaNFT is ERC1155, Ownable {
         pandas[_advanceId].class++;
     }
 
+    //function levelUp()
+
     // SET THIS TO INTERNAL ON DEPLOYMENT
-    function getRandomNumber(uint256 number) public view returns(uint256 a, uint256 b, uint256 c, uint256 d){ // In testing call this 1000's of times and view distribution
+    function getRandomNumber(uint256 number) public view returns(uint256 a, uint256 b, uint256 c, uint256 d){
         a = uint(keccak256(abi.encodePacked(msg.sender, block.timestamp))) % (number + 1);
         b = uint(keccak256(abi.encodePacked(block.timestamp, block.number))) % (number + 1);
         c = uint(keccak256(abi.encodePacked(block.number, msg.sender))) % (number + 1);

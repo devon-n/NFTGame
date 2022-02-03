@@ -4,6 +4,8 @@ require('chai')
     .use(require('chai-as-promised'))
     .use(require('chai-bignumber')(BN)).should();
 
+
+
 // For Random Number Generator
 const fs = require('fs');
 // Time Helpers
@@ -25,21 +27,22 @@ contract('PanToken', accounts => {
         this.token = await PandaNFT.new();
 
         fee = await this.token.fee();
+        await this.token.setPaused().should.be.fulfilled;
     });
 
     // name and symbol
     describe('Set functions work properly', () => {
         it('setPaused', async () => {
             let paused = await this.token.paused();
-            assert.equal(paused, true);
+            assert.equal(paused, false);
 
             await this.token.setPaused().should.be.fulfilled;
             paused = await this.token.paused();
-            assert.equal(paused, false);
+            assert.equal(paused, true);
             
             await this.token.setPaused({ from: accounts[1] }).should.be.rejectedWith('revert');
             paused = await this.token.paused();
-            assert.equal(paused, false);
+            assert.equal(paused, true);
         });
 
         it('setFee', async () => {
@@ -137,8 +140,9 @@ contract('PanToken', accounts => {
         // });
     // });
 
-    describe('can create pandas', () => {
+    describe('Minting', () => {
         it('can create a panda', async () => {
+            await this.token.setPaused().should.be.fulfilled;
             await this.token.mintPanda({ value: fee }).should.be.rejectedWith('revert');
             await this.token.setPaused().should.be.fulfilled;
 
@@ -146,8 +150,8 @@ contract('PanToken', accounts => {
             await this.token.mintPanda().should.be.rejectedWith('revert');
 
             let pandas = await this.token.getPandas();
-            let owner = await this.token.ownerOf(accounts[0], pandas[0].id);
-            assert.equal(owner, true)
+            let owner = await this.token.balanceOf(accounts[0], pandas[0].id);
+            assert.equal(owner, 1)
 
             start = await latest();
             end = start.add(duration.seconds(1));
@@ -157,14 +161,13 @@ contract('PanToken', accounts => {
             await this.token.mintPanda({ from: accounts[1] }).should.be.rejectedWith('revert');
 
             pandas = await this.token.getPandas();
-            owner = await this.token.ownerOf(accounts[1], pandas[1].id);
-            assert.equal(owner, true);
+            owner = await this.token.balanceOf(accounts[1], pandas[1].id);
+            assert.equal(owner, 1);
         });
     });
 
-    describe('can transfer between people', () => {
+    describe('Transferring', () => {
         it('can send between two people', async () => {
-            await this.token.setPaused().should.be.fulfilled;
             await this.token.mintPanda({from: accounts[2], value: fee }).should.be.fulfilled;
             let pandasOwned = await this.token.balanceOf(accounts[2], 0);
             assert.equal(1, pandasOwned);
@@ -178,8 +181,7 @@ contract('PanToken', accounts => {
         });
 
         it('can send between three people', async () => {
-            await this.token.setPaused().should.be.fulfilled;
-            await this.token.mintPanda({ from:accounts[1], value: fee}).should.be.fulfilled;
+            await this.token.mintPanda({ from: accounts[1], value: fee }).should.be.fulfilled;
             let pandasOwned = await this.token.balanceOf(accounts[1], 0);
             assert.equal(1, pandasOwned);
 
@@ -198,42 +200,106 @@ contract('PanToken', accounts => {
         });
     });
 
-//     describe('approvals', () => {
-//         it('can approve others', async () => {
-//             await this.token.createRandomPanda(nftName, {value: fee});
-//             let pandasOwned = await this.token.balanceOf(accounts[0]);
+    describe('Approvals', () => {
+        it('can approve others', async () => {
+            await this.token.mintPanda({ value: fee });
+            let pandasOwned = await this.token.balanceOf(accounts[0], 0);
 
-//             await this.token.approve(accounts[1], 0);
-//             let approved = await this.token.getApproved(0);
-//             assert.equal(approved, accounts[1]);
+            await this.token.setApprovalForAll(accounts[1], true);
+            let approved = await this.token.isApprovedForAll(accounts[0], accounts[1]);
+            assert.equal(approved, true);
 
-//             await this.token.safeTransferFrom(accounts[0], accounts[2], 0, { from: accounts[1] });
-//             const owner = await this.token.ownerOf(0);
-//             assert.equal(owner, accounts[2]);
-
-//             approved = await this.token.getApproved(0);
-//             assert.equal(approved, '0x0000000000000000000000000000000000000000');
-//         });
-//     });
+            await this.token.safeTransferFrom(accounts[0], accounts[2], 0, 1, 99, { from: accounts[1] });
+            let balance = await this.token.balanceOf(accounts[0], 0);
+            assert.equal(balance, 0);
+        });
+    });
 
 
 
-//     describe('withdraw function', () => {
-//         it('should let only the owner withdraw funds', async () => {
+    describe('Withdraw', () => {
+        it('should let only the owner withdraw funds', async () => {
+            const deployerBalance1 = await web3.eth.getBalance(accounts[0]);
+            let contractBalance = await web3.eth.getBalance(this.token.address);
+            assert.equal(Number(contractBalance), 0);
+
+            await this.token.mintPanda({ value: fee, from: accounts[1] });
+            contractBalance = await web3.eth.getBalance(this.token.address);
+            assert.equal(contractBalance, fee);
+
+            await this.token.withdraw();
+            await this.token.withdraw({ from:accounts[1] }).should.be.rejectedWith('revert');
+            const deployerBalance2 = await web3.eth.getBalance(accounts[0]);
+            assert.equal(Number(deployerBalance2) > Number(deployerBalance1), true);
+        });
+    });
+
+    describe('setLocked', () => {
+        it('Should set locked to true and back', async () => {
+            await this.token.mintPanda({ value: fee }).should.be.fulfilled;
+            await this.token.setLocked(0).should.be.fulfilled;
+            await this.token.setLocked(0, { from: accounts[1] }).should.be.rejectedWith('revert');
+    
+            let pandas = await this.token.getPandas();
+            let lockedStatus = pandas[0].locked;
+            assert.equal(lockedStatus, true);
+        });
+    });
+
+    describe('Sacrifice', () => {
+        it('should allow sacrifices', async () => {
+            await this.token.mintPanda({ value: fee }).should.be.fulfilled;
+            await this.token.mintPanda({ from: accounts[1], value: fee }).should.be.fulfilled;
+            let pandas = await this.token.getPandas();
+
+            await this.token.sacrifice(1, 0, { from: accounts[1] }).should.be.rejectedWith('revert');
+            await this.token.sacrifice(1, 0).should.be.fulfilled;
+            pandas = await this.token.getPandas();
+            assert.equal(pandas[1].id, 1);
+
+            let balances = Number(await this.token.balanceOf(accounts[0], 0));
+            assert.equal(balances, 0);
+        });
+
+        it('should not allow sacrifices past max classes', async () => {
+
+            for (let i = 0; i < 16; i++){
+                await this.token.mintPanda({ value: fee });
+            }
+
+            // Sacrifice to Class 1
+            for (let i = 0; i < 16; i+=2) {
+                await this.token.sacrifice(i, i+1).should.be.fulfilled;
+            }
             
-//             let deployerAddress = await web3.eth.getBalance(accounts[0]);
-//             let contractBalance = await web3.eth.getBalance(this.token.address);
-//             assert.equal(Number(contractBalance), 0);
+            // Sacrifice to Class 2
+            for (let i = 0; i < 16; i+=4) {
+                await this.token.sacrifice(i, i+2).should.be.fulfilled;
+            }
 
-//             await this.token.createRandomPanda(nftName, {value: fee, from: accounts[1]});
-//             contractBalance = await web3.eth.getBalance(this.token.address);
-//             assert.equal(contractBalance, fee);
+            // Class 3
+            for (let i = 0; i < 16; i+=8) {
+                await this.token.sacrifice(i, i+4);
+            }
 
-//             await this.token.withdraw();
-//             await this.token.withdraw({from:accounts[1]}).should.be.rejectedWith('revert');
-//             // assert.equal(Number(deployerAddress), Number(deployerAddress) + Number(fee));
-            
-//         });
-//     });
+            // Class 4
+            await this.token.sacrifice(0, 8).should.be.rejectedWith('revert');
+        });
+    });
+
+    describe('getRarity', () => {
+        it('Return the right rarity', async () => {
+            let rarity = Number(await this.token.getRarity(80));
+            assert.equal(rarity, 0);
+            rarity = Number(await this.token.getRarity(90));
+            assert.equal(rarity, 1);
+            rarity = Number(await this.token.getRarity(95));
+            assert.equal(rarity, 2);
+            rarity = Number(await this.token.getRarity(99));
+            assert.equal(rarity, 3);
+            rarity = Number(await this.token.getRarity(100));
+            assert.equal(rarity, 4);
+        });
+    });
 
 });
