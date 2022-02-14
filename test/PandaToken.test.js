@@ -267,17 +267,17 @@ contract('PanToken', accounts => {
                 await this.token.mintPanda({ value: fee });
             }
 
-            // Sacrifice to Class 1
+            // Sacrifice Every 2nd Panda for Class 1
             for (let i = 0; i < 16; i+=2) {
                 await this.token.sacrifice(i, i+1).should.be.fulfilled;
             }
             
-            // Sacrifice to Class 2
+            // Sacrifice Every 3 Panda for Class 2
             for (let i = 0; i < 16; i+=4) {
                 await this.token.sacrifice(i, i+2).should.be.fulfilled;
             }
 
-            // Class 3
+            // Sacrifice Every 4th Panda for Class 3
             for (let i = 0; i < 16; i+=8) {
                 await this.token.sacrifice(i, i+4);
             }
